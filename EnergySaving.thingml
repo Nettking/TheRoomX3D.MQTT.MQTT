@@ -3,8 +3,9 @@ import "timestuff.thingml"
 import "timer.thingml"
 
 thing EnergySaving includes LuminanceMsg, TemperatureMsg, TimeStuff, TimerMsgs{
-    provided port from_pim {receives luminance, set_temperature, set_day_start, set_night_start}
-    required port to_pim { sends set_temperature }
+    provided port from_pim {receives set_temperature, set_day_start, set_night_start}
+    provided port from_psm {receives luminance}
+	required port to_pim { sends set_temperature }
     required port to_psm { sends add_lightsensor }
     
     required port energy_timer {
@@ -26,7 +27,6 @@ thing EnergySaving includes LuminanceMsg, TemperatureMsg, TimeStuff, TimerMsgs{
             end
         state Normal {
         	on entry do
-        		println(" I am in normal state ")
         		to_pim!set_temperature(current_comfort_temp)
         	end
         	
@@ -40,7 +40,7 @@ thing EnergySaving includes LuminanceMsg, TemperatureMsg, TimeStuff, TimerMsgs{
         	
         	
             transition -> LightOff
-            event lum_input:from_pim?luminance
+            event lum_input:from_psm?luminance
         	guard lum_input.lum < light_threshold and (Night(Now()) == false) //if day
         	action do
         		current_luminance = lum_input.lum
@@ -48,7 +48,7 @@ thing EnergySaving includes LuminanceMsg, TemperatureMsg, TimeStuff, TimerMsgs{
         	end
         	
         	transition -> Night
-            event lum_input:from_pim?luminance
+            event lum_input:from_psm?luminance
         	guard lum_input.lum < light_threshold and (Night(Now()) == true) //if night
         	action do
         		current_luminance = lum_input.lum
@@ -101,7 +101,7 @@ thing EnergySaving includes LuminanceMsg, TemperatureMsg, TimeStuff, TimerMsgs{
         	end
         	
         	transition -> Normal
-        	event lum_input:from_pim?luminance
+        	event lum_input:from_psm?luminance
         	guard lum_input.lum >= light_threshold
         	action do
         		current_luminance = lum_input.lum
@@ -139,7 +139,6 @@ thing EnergySaving includes LuminanceMsg, TemperatureMsg, TimeStuff, TimerMsgs{
 
         state Night {
             on entry do
-        		println(" I am in night state ")
         		energy_timer!timer_start(LeftOfNight())
         	end
         	
@@ -152,7 +151,7 @@ thing EnergySaving includes LuminanceMsg, TemperatureMsg, TimeStuff, TimerMsgs{
         	end
         	
             transition -> Normal
-        	event lum_input:from_pim?luminance
+        	event lum_input:from_psm?luminance
         	guard lum_input.lum >= light_threshold
         	action do
         		current_luminance = lum_input.lum
