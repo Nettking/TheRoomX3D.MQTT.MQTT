@@ -13,7 +13,7 @@ thing PIM includes GeneralMsg, TemperatureMsg, OnOffMsg, TimerMsgs, LuminanceMsg
 	}
 
 	required port to_EnergySaving {
-		sends set_temperature, luminance, set_day_start, set_night_start
+		sends set_temperature, set_day_start, set_night_start
 	}
 
 	provided port from_EnergySaving { receives set_temperature }
@@ -39,19 +39,20 @@ thing PIM includes GeneralMsg, TemperatureMsg, OnOffMsg, TimerMsgs, LuminanceMsg
 	
 	property current_temp:Double = 0 // the last temperature recorded, buffering one measurement
 	property current_average_diff:Double = 0
-	property warming_time:Double = 10
-	property cooling_time:Double = 10
+	//property warming_time:Double = 10
+	//property cooling_time:Double = 10
 	property buffer_size:Integer = 10
 	property temp_buffer:Double[10]
 	property buffer_rear:Integer = 0
 	property buffer_front:Integer = 0
-
+	property night_start:Long = 23*60*60*1000 // 11PM is default night time
+	property day_start:Long = 7*60*60*1000 // 7AM is default day start time
 
 	statechart PIM_behavior init Build {
 		on entry do
 			println("Running The Room X3.MQTT.MQTT")
 		end
-		composite state Build init SetThermostat {
+		composite state Build init SetThermostat keeps history {
 		on entry guard_human!timer_start(30000) // 30s to start the thermostat 
 		on exit guard_human!timer_cancel()
 			state SetThermostat {
@@ -75,13 +76,21 @@ thing PIM includes GeneralMsg, TemperatureMsg, OnOffMsg, TimerMsgs, LuminanceMsg
 			transition -> Running
 			event set_temp:from_psm?set_temperature
 			action do
+				to_EnergySaving!set_temperature(set_temp.t) // SIMULATION: prompting on console for the user to react properly
+				to_EnergySaving!set_day_start(day_start)
+				to_EnergySaving!set_night_start(night_start)
+			end
+
+			// Normal transition to the Running state
+			transition -> Running
+			event set_temp:from_EnergySaving?set_temperature
+			action do
 				tmrature = set_temp.t
 				to_psm!prompt("Now entering thermostat. Please give temperature observations") // SIMULATION: prompting on console for the user to react properly
 			end
 
 			//Escape situations
-			// transition -> Build (This was the construction in X2D)
-			// Now the parameters that should not change the innermost state
+
 			internal event givedelta:from_psm?set_delta
 			action do
 				delta = givedelta.dlta
@@ -89,6 +98,7 @@ thing PIM includes GeneralMsg, TemperatureMsg, OnOffMsg, TimerMsgs, LuminanceMsg
 
 			internal event temp:from_psm?temperature
 			action do 
+				current_temp = temp.t
 				buffer_rear = (buffer_rear + 1) % buffer_size
 				if(buffer_rear == buffer_front) do
 					buffer_front = (buffer_front + 1) % buffer_size
@@ -127,7 +137,7 @@ thing PIM includes GeneralMsg, TemperatureMsg, OnOffMsg, TimerMsgs, LuminanceMsg
 					guard temp.t<=tmrature+delta
 					action do
 						if (lasttemp>temp.t) to_psm!SwitchOn(switch_id) // the temperature is still falling even though switch should be ON, reactivate
-						
+						current_temp = temp.t
 						temp_buffer[buffer_rear] = temp.t
 						current_average_diff = (temp_buffer[buffer_rear]-temp_buffer[buffer_front])/(buffer_size -1)
 						println(temp.t)
@@ -166,6 +176,12 @@ thing PIM includes GeneralMsg, TemperatureMsg, OnOffMsg, TimerMsgs, LuminanceMsg
 						delta = givedelta.dlta
 					end
 
+					internal event fetch:from_psm?fetch_temp
+					action do
+						// reporting the temperature value
+						to_psm!prompt("Last temperature: "+lasttemp)
+					end
+					
 				}
 
 				state TemprDecrease{ // Invariant: Switch is OFF and temperature should decrease
@@ -178,6 +194,7 @@ thing PIM includes GeneralMsg, TemperatureMsg, OnOffMsg, TimerMsgs, LuminanceMsg
 					action do
 						// TRACING to follow thermostat print("TempDecrease: Observed=") print(temp.t) print(" Desired ") print(tmrature) print("\n") 
 						if (lasttemp<temp.t) to_psm!SwitchOff(switch_id) // the temperature is still rising even though switch should be OFF, reactivate	
+						current_temp = temp.t
 						temp_buffer[buffer_rear] = temp.t
 						current_average_diff = (temp_buffer[buffer_rear]-temp_buffer[buffer_front])/(buffer_size -1)						
 						buffer_rear = (buffer_rear + 1) % buffer_size
@@ -192,7 +209,7 @@ thing PIM includes GeneralMsg, TemperatureMsg, OnOffMsg, TimerMsgs, LuminanceMsg
 					guard temp2.t<tmrature-delta
 					action do
 						to_psm!SwitchOn(switch_id)
-						
+						current_temp = temp2.t
 						temp_buffer[buffer_rear] = temp2.t
 						lasttemp = temp_buffer[buffer_rear]
 						current_average_diff = (temp_buffer[buffer_rear]-temp_buffer[buffer_front])/(buffer_size -1)
@@ -260,7 +277,7 @@ thing PIM includes GeneralMsg, TemperatureMsg, OnOffMsg, TimerMsgs, LuminanceMsg
 				event temp:from_psm?temperature
 				action do
 					if (lasttemp>temp.t) to_psm!SwitchOn(switch_id) // temperature is falling even when ON. Reactivate.
-					
+					current_temp = temp.t
 					temp_buffer[buffer_rear] = temp.t
 					current_average_diff = (temp_buffer[buffer_rear]-temp_buffer[buffer_front])/(buffer_size -1)			
 					buffer_rear = (buffer_rear + 1) % buffer_size
@@ -293,6 +310,7 @@ thing PIM includes GeneralMsg, TemperatureMsg, OnOffMsg, TimerMsgs, LuminanceMsg
 				event temp:from_psm?temperature
 				action do
 					if (lasttemp<temp.t) to_psm!SwitchOff(switch_id) // temperature is rising even when OFF. Reactivate.
+					current_temp = temp.t
 					temp_buffer[buffer_rear] = temp.t
 					current_average_diff = (temp_buffer[buffer_rear]-temp_buffer[buffer_front])/(buffer_size -1)			
 					buffer_rear = (buffer_rear + 1) % buffer_size
@@ -337,6 +355,7 @@ thing PIM includes GeneralMsg, TemperatureMsg, OnOffMsg, TimerMsgs, LuminanceMsg
 			event temp:from_psm?temperature
 			action do
 				to_psm!prompt("INTERNAL ERROR: temperature received at PIM.Running")
+				current_temp = temp.t
 				temp_buffer[buffer_rear] = temp.t
 				current_average_diff = (temp_buffer[buffer_rear]-temp_buffer[buffer_front])/(buffer_size -1)
 				buffer_rear = (buffer_rear + 1) % buffer_size
