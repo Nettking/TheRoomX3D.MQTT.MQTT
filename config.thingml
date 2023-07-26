@@ -26,6 +26,7 @@ configuration X3D_MQTT_MQTT {
 	connector pim.to_EnergySaving => e_saving.from_pim
 	connector e_saving.to_pim => pim.from_EnergySaving
 	connector e_saving.to_psm => T1.from_EnergySaving
+	connector T1.to_EnergySaving => e_saving.from_psm
 
 
 	// Simulation
