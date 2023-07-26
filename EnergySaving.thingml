@@ -87,7 +87,6 @@ thing EnergySaving includes LuminanceMsg, TemperatureMsg, TimeStuff, TimerMsgs{
         
         state LightOff {
         	on entry do
-        		println(" I am in LightOff state ")
         		energy_timer!timer_start(LeftOfDay())
         	end
         	
