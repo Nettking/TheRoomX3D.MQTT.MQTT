@@ -17,11 +17,12 @@ protocol MQTT @serializer "JSON"
 thing MQTTDriver includes TemperatureMsg, OnOffMsg, GeneralMsg, LuminanceMsg {
 	required port to_pim {sends temperature, heatOn, heatOff, set_temperature, set_delta, fetch_temp}
 	provided port from_pim {receives add_thermometer, add_device, SwitchOn, SwitchOff, prompt}
+	required port to_EnergySaving {sends luminance}
 	provided port from_EnergySaving {receives add_lightsensor }
 	
 	//Only one MQTT port to receive the sensor values
 	provided port MQTT {
-		receives temperature, heatOn, heatOff, set_temperature, set_delta, fetch_temp
+		receives luminance, temperature, heatOn, heatOff, set_temperature, set_delta, fetch_temp
 		sends SwitchOn,SwitchOff
 	}
 
@@ -76,7 +77,7 @@ thing MQTTDriver includes TemperatureMsg, OnOffMsg, GeneralMsg, LuminanceMsg {
 				thermoval[last_thermo]= 20 // just a default temperature
 				last_thermo = last_thermo+1
 			end
-			
+
 			transition -> Idle
 			event add_dev: from_pim?add_device
 			action do
@@ -178,6 +179,26 @@ thing MQTTDriver includes TemperatureMsg, OnOffMsg, GeneralMsg, LuminanceMsg {
 				lightval[last_light] = 50
 				last_light = last_light+1
 			end
+
+			transition -> Idle
+			event put_lum:MQTT?luminance
+			action do
+				id_s=put_lum.id
+				
+				i=0
+				foundL = false
+				while (i<last_light and (not foundL)) do
+					if(id_s==lightsensors[i]) do
+						foundL = true //Terminates loop
+					end
+					i=i+1
+				end
+				if (foundL) do
+					lightval[i-1]=put_lum.lum
+					to_EnergySaving!luminance(id_s, put_lum.lum)
+				end
+			end
+
 			
 		}
 	}
