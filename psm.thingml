@@ -15,14 +15,14 @@ protocol MQTT @serializer "JSON"
   @mqtt_subscribe_topic "CPS2021/tempoutput";
 
 thing MQTTDriver includes TemperatureMsg, OnOffMsg, GeneralMsg, LuminanceMsg {
-	required port to_pim {sends temperature, heatOn, heatOff, set_temperature, set_delta, fetch_temp}
+	required port to_pim {sends temperature, heatOn, heatOff, set_temperature, set_delta, fetch_temp, set_night_start, set_day_start, set_luminance}
 	provided port from_pim {receives add_thermometer, add_device, SwitchOn, SwitchOff, prompt}
 	required port to_EnergySaving {sends luminance}
 	provided port from_EnergySaving {receives add_lightsensor }
 	
 	//Only one MQTT port to receive the sensor values
 	provided port MQTT {
-		receives luminance, temperature, heatOn, heatOff, set_temperature, set_delta, fetch_temp
+		receives luminance, temperature, heatOn, heatOff, set_temperature, set_delta, fetch_temp, set_day_start, set_night_start, set_luminance
 		sends SwitchOn,SwitchOff
 	}
 
@@ -198,6 +198,24 @@ thing MQTTDriver includes TemperatureMsg, OnOffMsg, GeneralMsg, LuminanceMsg {
 					to_EnergySaving!luminance(id_s, put_lum.lum)
 				end
 			end
+			
+			transition -> Idle
+			event evn: MQTT?set_day_start
+			action do
+				to_pim!set_day_start(evn.time)
+			end	
+			
+			transition -> Idle
+			event evnt: MQTT?set_night_start
+			action do
+				to_pim!set_night_start(evnt.time)
+			end	
+			
+			transition -> Idle
+			event evnt: MQTT?set_luminance
+			action do
+				to_pim!set_luminance(evnt.lum)
+			end	
 
 			
 		}
