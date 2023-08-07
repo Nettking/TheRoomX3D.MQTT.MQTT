@@ -9,7 +9,7 @@ thing PIM includes GeneralMsg, TemperatureMsg, OnOffMsg, TimerMsgs, LuminanceMsg
 		sends add_thermometer, add_device, SwitchOn, SwitchOff, prompt
 	}
 	provided port from_psm {
-		receives heatOn, heatOff, set_temperature, set_delta, temperature, fetch_temp
+		receives heatOn, heatOff, set_temperature, set_delta, temperature, fetch_temp, set_day_start, set_night_start, set_luminance
 	}
 
 	required port to_EnergySaving {
